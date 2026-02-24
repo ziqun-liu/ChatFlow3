@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Throughput Over Time</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<h2>Throughput Over Time (10s buckets)</h2>
+<canvas id="chart" width="900" height="400"></canvas>
+<script>
+new Chart(document.getElementById('chart'), {
+  type: 'line',
+  data: {
+    labels: ["0s","10s","20s","30s","40s","50s","60s","70s"],
+    datasets: [{
+      label: 'Throughput (msg/s)',
+      data: [7410,7407,7607,8551,7088,7723,4170,46],
+      borderColor: 'rgb(75, 192, 192)',
+      backgroundColor: 'rgba(75, 192, 192, 0.1)',
+      tension: 0.1,
+      fill: true
+    }]
+  },
+  options: {
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'msg/s' } },
+      x: { title: { display: true, text: 'Time (seconds)' } }
+    }
+  }
+});
+</script>
+</body>
+</html>

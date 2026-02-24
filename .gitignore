@@ -1,0 +1,9 @@
+.idea
+target
+.mvn
+.DS_Store
+dependency-reduced-pom.xml
+*.iml
+*.class
+*.log
+config.properties
