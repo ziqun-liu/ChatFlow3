@@ -281,6 +281,13 @@ chmod +x deployment/deploy-all.sh
 ./deployment/deploy-all.sh
 ```
 
+```bash
+cd /client
+mvn clean package
+WS_URI="ws://cs6650-assignment2-lb-1697352352.us-west-2.elb.amazonaws.com/server/chat/" \
+java -jar target/client-1.0-SNAPSHOT.jar
+```
+
 ### Environment Variables
 
 | Variable | Used by | Description |

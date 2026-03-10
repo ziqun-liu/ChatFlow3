@@ -26,10 +26,10 @@ EC2_HOSTS=(
   "34.222.11.122"                      # Replace with public IP of server-v2 EC2 instance 4
 )
 
-TOMCAT_DIR="/opt/tomcat"
+TOMCAT_DIR="/opt/tomcat9"
 TOMCAT_WEBAPPS="$TOMCAT_DIR/webapps"
 WAR_NAME="server.war"
-SERVER_V2_DIR="$(dirname "$0")/../server-v2"
+SERVER_V2_DIR="$(cd "$(dirname "$0")/../server-v2" && pwd)"
 LOCAL_WAR="$SERVER_V2_DIR/target/$WAR_NAME"
 
 # RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, REDIS_HOST, REDIS_PORT
@@ -68,7 +68,10 @@ for i in "${!EC2_HOSTS[@]}"; do
 
     echo "  Stopping Tomcat..."
     sudo "$TOMCAT_DIR/bin/shutdown.sh" 2>/dev/null || true
-    sleep 3
+    sleep 5
+    # Force-kill any process still holding port 8080
+    sudo fuser -k 8080/tcp 2>/dev/null || true
+    sleep 1
 
     echo "  Removing old deployment..."
     sudo rm -rf "$TOMCAT_WEBAPPS/server" "$TOMCAT_WEBAPPS/$WAR_NAME"

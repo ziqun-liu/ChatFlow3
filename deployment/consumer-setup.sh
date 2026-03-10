@@ -20,7 +20,7 @@ CONSUMER_HOST="54.212.1.204"   # Replace with public IP of consumer EC2 instance
 # RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, REDIS_HOST, REDIS_PORT, CONSUMER_THREADS
 # are inherited from deploy-all.sh (or must be exported before calling this script directly)
 
-CONSUMER_DIR="$(dirname "$0")/../consumer"
+CONSUMER_DIR="$(cd "$(dirname "$0")/../consumer" && pwd)"
 JAR_NAME="consumer-1.0-SNAPSHOT.jar"
 LOCAL_JAR="$CONSUMER_DIR/target/$JAR_NAME"
 REMOTE_DIR="/opt/consumer"
