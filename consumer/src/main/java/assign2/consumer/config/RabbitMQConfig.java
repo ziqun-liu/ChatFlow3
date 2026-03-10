@@ -22,6 +22,8 @@ public class RabbitMQConfig {
   public static final String EXCHANGE;
   public static final String EXCHANGE_TYPE = "topic";
   public static final int ROOM_COUNT = 20;
+  public static final String DLX_EXCHANGE = "chat.dlx";
+  public static final String DLQ_NAME     = "room.dlq";
 
   static {
     Properties props = loadProperties();

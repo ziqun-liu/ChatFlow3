@@ -6,11 +6,11 @@ rabbitmq.user=guest
 rabbitmq.pass=guest
 rabbitmq.exchange=chat.exchange
 
-# Comma-separated list of server-v2 base URLs (no trailing slash)
-# Local: single server. Production: all ALB target instances.
-server.urls=http://localhost:8080/server
+# Redis connection (used for Pub/Sub broadcast to server-v2 instances)
+redis.host=localhost
+redis.port=6379
 
 # Number of RoomConsumer threads.
 # Each thread handles (ROOM_COUNT / consumer.threads) rooms.
-# 20 rooms / 4 threads = 5 rooms per thread.
-consumer.threads=4
+# 20 rooms / 10 threads = 2 rooms per thread.
+consumer.threads=10

@@ -140,7 +140,7 @@ public class ClientMain {
     mainMetrics.messageTypeDistribution();
     mainMetrics.roomThroughput();
     mainMetrics.throughputChart();
-    mainMetrics.writeCsv("results/metrics.csv");
-    mainMetrics.writeChart("results/throughput.html");
+    // mainMetrics.writeCsv("results/metrics.csv");
+    // mainMetrics.writeChart("results/throughput.html");
   }
 }

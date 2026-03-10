@@ -1,4 +1,4 @@
-package assign2.server.v2.servlet;
+package assign2.server.v2.controller;
 
 import java.io.IOException;
 import javax.servlet.annotation.WebServlet;

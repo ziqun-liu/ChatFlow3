@@ -61,7 +61,7 @@ public class ChatResponse {
     this.type = "ACK";
   }
 
-  // Broadcast response — built from QueueMessage (used by BroadcastServlet)
+  // Broadcast response — built from QueueMessage
   public ChatResponse(QueueMessage msg) {
     this.messageId   = msg.getMessageId();
     this.userId      = msg.getUserId();

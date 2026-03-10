@@ -1,6 +1,7 @@
-package assign2.consumer;
+package assign2.consumer.controller;
 
 import assign2.consumer.config.RabbitMQConfig;
+import assign2.consumer.service.RedisPublisher;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -23,13 +24,13 @@ public class ConsumerManager {
   private static final Logger logger = Logger.getLogger(ConsumerManager.class.getName());
 
   private final int numThreads;
-  private final ServerNotifier notifier;
+  private final RedisPublisher redisPublisher;
   private final ExecutorService executor;
   private final List<RoomConsumer> consumers = new ArrayList<>();
 
-  public ConsumerManager(int numThreads, ServerNotifier notifier) {
+  public ConsumerManager(int numThreads, RedisPublisher redisPublisher) {
     this.numThreads = numThreads;
-    this.notifier = notifier;
+    this.redisPublisher = redisPublisher;
     this.executor = Executors.newFixedThreadPool(numThreads);
   }
 
@@ -41,18 +42,31 @@ public class ConsumerManager {
     List<List<String>> roomsPerThread = new ArrayList<>();
     for (int i = 0; i < this.numThreads; i++) {
       roomsPerThread.add(new ArrayList<>());
+      // ex. numThread = 4
+      //    roomsPerThread =
+      //    [
+      //      [], // thread 0
+      //      [], // thread 1
+      //      [], // thread 2
+      //      []  // thread 3
+      //    ]
     }
 
     for (int roomNum = 1; roomNum <= RabbitMQConfig.ROOM_COUNT; roomNum++) {
       String roomId = String.valueOf(roomNum);
       int threadIndex = (roomNum - 1) % this.numThreads;
       roomsPerThread.get(threadIndex).add(roomId);
+      // Suppose there are 4 threads and 20 rooms:
+      //    thread 0: 1, 5, 9, 13, 17
+      //    thread 1: 2, 6, 10, 14, 18
+      //    thread 2: 3, 7, 11, 15, 19
+      //    thread 3: 4, 8, 12, 16, 20
     }
 
     // Start one RoomConsumer per thread
     for (int i = 0; i < numThreads; i++) {
       List<String> assignedRooms = roomsPerThread.get(i);
-      RoomConsumer consumer = new RoomConsumer(assignedRooms, this.notifier);
+      RoomConsumer consumer = new RoomConsumer(assignedRooms, this.redisPublisher);
       this.consumers.add(consumer);
       this.executor.submit(consumer);
       logger.info("Started consumer thread-" + i + " for rooms=" + assignedRooms);
@@ -68,7 +82,7 @@ public class ConsumerManager {
    */
   public void shutdown() {
     logger.info("Shutting down ConsumerManager...");
-    this.consumers.forEach(RoomConsumer::stop);
+    this.consumers.forEach(RoomConsumer::stop);  // gracefully stop
     this.executor.shutdown();
     try {
       if (!this.executor.awaitTermination(10, TimeUnit.SECONDS)) {

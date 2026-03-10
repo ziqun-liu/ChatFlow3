@@ -32,8 +32,8 @@ WAR_NAME="server.war"
 SERVER_V2_DIR="$(dirname "$0")/../server-v2"
 LOCAL_WAR="$SERVER_V2_DIR/target/$WAR_NAME"
 
-RABBITMQ_HOST="172.31.28.111"  # Replace with public private IP of RabbitMQ EC2 (not public IP)
-                                               # Find it in AWS Console: EC2 → Private IPv4 addresses
+# RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, REDIS_HOST, REDIS_PORT
+# are inherited from deploy-all.sh (or must be exported before calling this script directly)
 # ───────────────────────────────────────────────────────────────────────────
 
 echo "======================================"
@@ -77,17 +77,23 @@ for i in "${!EC2_HOSTS[@]}"; do
     sudo cp /tmp/$WAR_NAME "$TOMCAT_WEBAPPS/$WAR_NAME"
     sudo chown -R ec2-user:ec2-user "$TOMCAT_WEBAPPS/$WAR_NAME"
 
-    echo "  Writing environment config..."
-    sudo tee /etc/profile.d/chatflow.sh > /dev/null <<ENV
-export SERVER_ID="$SERVER_ID"
-export RABBITMQ_HOST="$RABBITMQ_HOST"
-export RABBITMQ_PORT="5672"
-export RABBITMQ_USER="guest"
-export RABBITMQ_PASS="guest"
+    echo "  Writing Tomcat environment config..."
+    # Pass config as JVM system properties via CATALINA_OPTS so Tomcat inherits them
+    # regardless of shell login type. Config.java reads System.getProperty() as fallback.
+    sudo tee "$TOMCAT_DIR/bin/setenv.sh" > /dev/null <<ENV
+export CATALINA_OPTS="\
+  -DSERVER_ID=$SERVER_ID \
+  -DRABBITMQ_HOST=$RABBITMQ_HOST \
+  -DRABBITMQ_PORT=5672 \
+  -DRABBITMQ_USER=$RABBITMQ_USER \
+  -DRABBITMQ_PASS=$RABBITMQ_PASS \
+  -DREDIS_HOST=$REDIS_HOST \
+  -DREDIS_PORT=$REDIS_PORT"
 ENV
+    sudo chmod +x "$TOMCAT_DIR/bin/setenv.sh"
 
     echo "  Starting Tomcat..."
-    sudo -E "$TOMCAT_DIR/bin/startup.sh"
+    sudo "$TOMCAT_DIR/bin/startup.sh"
 
     echo "  Waiting for Tomcat to start..."
     for attempt in 1 2 3 4 5; do

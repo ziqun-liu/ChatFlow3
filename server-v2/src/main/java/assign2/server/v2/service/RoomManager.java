@@ -1,4 +1,4 @@
-package assign2.server.v2.room;
+package assign2.server.v2.service;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -6,7 +6,7 @@ import javax.websocket.Session;
 
 /**
  * Manages the mapping of roomId to active WebSocket sessions.
- * Used by ServerEndpoint (onOpen/onClose) and BroadcastServlet (broadcast).
+ * Used by ServerEndpoint (onOpen/onClose) and RedisSubscriber (broadcast).
  */
 public class RoomManager {
 
@@ -17,7 +17,10 @@ public class RoomManager {
   }
 
   public static void removeSession(String roomId, Session session) {
-    rooms.getOrDefault(roomId, Set.of()).remove(session);
+    rooms.computeIfPresent(roomId, (k, sessions) -> {
+      sessions.remove(session);
+      return sessions.isEmpty() ? null : sessions;  // null removes the map entry
+    });
   }
 
   public static Set<Session> getSessions(String roomId) {

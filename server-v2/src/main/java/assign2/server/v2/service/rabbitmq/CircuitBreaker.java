@@ -1,4 +1,4 @@
-package assign2.server.v2.rabbitmq;
+package assign2.server.v2.service.rabbitmq;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;

@@ -9,10 +9,13 @@
 set -e
 cd "$(dirname "$0")"
 
-# ── Configuration (replace variable values before use) ────────────────────────
-export RABBITMQ_HOST="16.147.81.157"
+# ── Configuration (single source of truth — edit only here) ──────────────────
+export RABBITMQ_HOST="16.147.81.157"   # RabbitMQ EC2 public IP
 export RABBITMQ_USER="guest"
 export RABBITMQ_PASS="guest"
+export REDIS_HOST="cs6650-assignment2-redis.yl1jzz.ng.0001.usw2.cache.amazonaws.com"
+export REDIS_PORT="6379"
+export CONSUMER_THREADS="10"
 export WS_URI="ws://cs6650-assignment2-lb-1697352352.us-west-2.elb.amazonaws.com/server/chat/"
 # ───────────────────────────────────────────────────────────────────────────
 

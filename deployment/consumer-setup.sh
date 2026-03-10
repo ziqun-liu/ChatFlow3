@@ -17,12 +17,8 @@ SSH_KEY="~/.ssh/cs6650-assignment2.pem"          # Replace with your SSH private
 EC2_USER="ec2-user"
 CONSUMER_HOST="54.212.1.204"   # Replace with public IP of consumer EC2 instance
 
-# Private IPs of all server-v2 instances, comma-separated (use private IPs to reduce latency)
-# Find them in AWS Console: EC2 → Private IPv4 addresses
-SERVER_URLS="http://172.31.22.27:8080/server,http://172.31.20.201:8080/server,http://172.31.28.59:8080/server,http://172.31.28.143:8080/server"
-
-RABBITMQ_HOST="172.31.28.111"  # Replace with private IP of RabbitMQ EC2 (not public IP)
-CONSUMER_THREADS="4"                           # Number of consumer threads (20 rooms / 4 threads = 5 rooms per thread)
+# RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, REDIS_HOST, REDIS_PORT, CONSUMER_THREADS
+# are inherited from deploy-all.sh (or must be exported before calling this script directly)
 
 CONSUMER_DIR="$(dirname "$0")/../consumer"
 JAR_NAME="consumer-1.0-SNAPSHOT.jar"
@@ -68,9 +64,10 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$CONSUMER_HOST" bash <<
   nohup env \
     RABBITMQ_HOST="$RABBITMQ_HOST" \
     RABBITMQ_PORT="5672" \
-    RABBITMQ_USER="guest" \
-    RABBITMQ_PASS="guest" \
-    SERVER_URLS="$SERVER_URLS" \
+    RABBITMQ_USER="$RABBITMQ_USER" \
+    RABBITMQ_PASS="$RABBITMQ_PASS" \
+    REDIS_HOST="$REDIS_HOST" \
+    REDIS_PORT="$REDIS_PORT" \
     CONSUMER_THREADS="$CONSUMER_THREADS" \
     java -jar "$REMOTE_DIR/$JAR_NAME" \
     > "$REMOTE_DIR/consumer.log" 2>&1 &

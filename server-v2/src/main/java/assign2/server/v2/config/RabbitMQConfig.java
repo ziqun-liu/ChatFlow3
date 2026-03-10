@@ -7,8 +7,10 @@ import java.util.logging.Logger;
 
 /**
  * RabbitMQ configuration loader.
- * Priority: environment variables > config.properties > hardcoded defaults.
+ * Priority: env var > JVM system property (-D) > config.properties > hardcoded defaults.
  * Environment variables: RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS
+ * JVM properties:        RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS
+ *                        (set via CATALINA_OPTS=-DRABBITMQ_HOST=... for Tomcat deployments)
  */
 public class RabbitMQConfig {
 
@@ -56,6 +58,8 @@ public class RabbitMQConfig {
       String propKey, String defaultValue) {
     String envVal = System.getenv(envKey);
     if (envVal != null && !envVal.isEmpty()) return envVal;
+    String sysProp = System.getProperty(envKey);  // -DRABBITMQ_HOST=... via CATALINA_OPTS
+    if (sysProp != null && !sysProp.isEmpty()) return sysProp;
     String propVal = props.getProperty(propKey);
     if (propVal != null && !propVal.isEmpty()) return propVal;
     return defaultValue;

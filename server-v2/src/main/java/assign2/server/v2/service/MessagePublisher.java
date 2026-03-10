@@ -1,7 +1,9 @@
-package assign2.server.v2.rabbitmq;
+package assign2.server.v2.service;
 
 import assign2.server.v2.config.RabbitMQConfig;
 import assign2.server.v2.model.QueueMessage;
+import assign2.server.v2.service.rabbitmq.ChannelPool;
+import assign2.server.v2.service.rabbitmq.CircuitBreaker;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import java.util.logging.Logger;
@@ -41,7 +43,7 @@ public class MessagePublisher {
    */
   public boolean publish(QueueMessage queueMsg) {
     // Fast-fail if circuit is OPEN — avoids waiting CONFIRM_TIMEOUT_MS per message
-    if (!circuitBreaker.allowRequest()) {
+    if (!this.circuitBreaker.allowRequest()) {
       logger.warning(
           "CircuitBreaker OPEN — skipping publish for messageId=" + queueMsg.getMessageId());
       return false;
@@ -49,7 +51,7 @@ public class MessagePublisher {
 
     Channel channel = null;
     try {
-      channel = channelPool.borrow();
+      channel = this.channelPool.borrow();
 
       String routingKey = RabbitMQConfig.routingKey(queueMsg.getRoomId());
       byte[] body = queueMsg.toJson().getBytes("UTF-8");
@@ -63,29 +65,29 @@ public class MessagePublisher {
       // Wait for RabbitMQ broker confirm — blocks up to CONFIRM_TIMEOUT_MS
       boolean confirmed = channel.waitForConfirms(CONFIRM_TIMEOUT_MS);
       if (confirmed) {
-        circuitBreaker.recordSuccess();
+        this.circuitBreaker.recordSuccess();
       } else {
         logger.warning("RabbitMQ nack for messageId=" + queueMsg.getMessageId());
-        circuitBreaker.recordFailure();
+        this.circuitBreaker.recordFailure();
       }
       return confirmed;
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       logger.warning("Interrupted while waiting for confirm: " + e.getMessage());
-      circuitBreaker.recordFailure();
+      this.circuitBreaker.recordFailure();
       return false;
     } catch (Exception e) {
       logger.severe(
           "Failed to publish messageId=" + queueMsg.getMessageId() + ": " + e.getMessage());
-      circuitBreaker.recordFailure();
+      this.circuitBreaker.recordFailure();
       return false;
     } finally {
-      channelPool.returnChannel(channel);
+      this.channelPool.returnChannel(channel);
     }
   }
 
   public void logMetrics() {
-    circuitBreaker.summary();
+    this.circuitBreaker.summary();
   }
 }

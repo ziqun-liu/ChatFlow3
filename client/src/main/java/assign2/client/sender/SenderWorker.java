@@ -31,7 +31,7 @@ public class SenderWorker implements Runnable {
   public void run() {
     try {
       while (true) {
-        ChatMessage msg = queue.poll(2, TimeUnit.SECONDS);
+        ChatMessage msg = this.queue.poll(2, TimeUnit.SECONDS);
         if (msg == null || msg == ChatMessage.POISON) {
           break;
         }
@@ -39,42 +39,42 @@ public class SenderWorker implements Runnable {
         sendWithRetry(msg);
       }
     } catch (Exception e) {
-      System.err.println("[SenderWorker room=" + roomId + "] " + e.getMessage());
+      System.err.println("[SenderWorker room=" + this.roomId + "] " + e.getMessage());
     }
   }
 
   private void sendWithRetry(ChatMessage msg) throws InterruptedException {
     for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      connMgr.acquire(roomId);
+      this.connMgr.acquire(this.roomId);
       try {
-        ClientEndpoint client = connMgr.conn(roomId);
+        ClientEndpoint client = this.connMgr.conn(this.roomId);
         long startMs = System.currentTimeMillis();
         String ack = client.sendAndAwaitAck(msg.toJson(), msg.getMessageId(), 5000);
         if (ack != null) {
           long latencyMs = System.currentTimeMillis() - startMs;
           int statusCode = isAckSuccess(ack) ? 200 : 400;
-          metrics.recordMessageMetrics(startMs, msg.getMessageType(), latencyMs, statusCode, roomId);
+          this.metrics.recordMessageMetrics(startMs, msg.getMessageType(), latencyMs, statusCode, roomId);
           if (attempt > 0) {
-            metrics.recordRetrySuccess();
+            this.metrics.recordRetrySuccess();
           }
           return;
         }
         // timeout — reconnect and retry
-        connMgr.reconnect(roomId);
+        this.connMgr.reconnect(this.roomId);
       } catch (Exception e) {
-        System.err.println("[Retry " + attempt + " room=" + roomId + "] " + e.getMessage());
+        System.err.println("[Retry " + attempt + " room=" + this.roomId + "] " + e.getMessage());
         try {
-          connMgr.reconnect(roomId);
+          this.connMgr.reconnect(this.roomId);
         } catch (Exception re) {
-          System.err.println("[Reconnect failed room=" + roomId + "] " + re.getMessage());
+          System.err.println("[Reconnect failed room=" + this.roomId + "] " + re.getMessage());
         }
       } finally {
-        connMgr.release(roomId);
+        this.connMgr.release(this.roomId);
       }
       long backoff = BASE_BACKOFF_MS * (1L << attempt);
       Thread.sleep(backoff);
     }
-    metrics.recordFailure();
+    this.metrics.recordFailure();
   }
 
   // Returns true if the ACK indicates the server successfully published the message.

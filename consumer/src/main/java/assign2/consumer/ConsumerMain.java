@@ -1,21 +1,22 @@
 package assign2.consumer;
 
 import assign2.consumer.config.RabbitMQConfig;
+import assign2.consumer.config.RedisConfig;
+import assign2.consumer.controller.ConsumerManager;
+import assign2.consumer.service.ConsumerMetrics;
+import assign2.consumer.service.RedisPublisher;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Properties;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 /**
  * Entry point for the Consumer service.
  * <p>
- * Reads config.properties, constructs ServerNotifier and ConsumerManager, starts consuming, and
+ * Reads config.properties, constructs RedisPublisher and ConsumerManager, starts consuming, and
  * registers a JVM shutdown hook for graceful exit.
  * <p>
- * Run: java -jar consumer.jar Override config via env vars: RABBITMQ_HOST, SERVER_URLS,
+ * Run: java -jar consumer.jar Override config via env vars: RABBITMQ_HOST, REDIS_HOST, REDIS_PORT,
  * CONSUMER_THREADS
  */
 public class ConsumerMain {
@@ -26,28 +27,25 @@ public class ConsumerMain {
   public static void main(String[] args) throws Exception {
     Properties props = loadProperties();
 
-    // Server URLs — comma-separated, e.g. "http://server1:8080/server,http://server2:8080/server"
-    String urlsRaw = resolve("SERVER_URLS", props, "server.urls", "http://localhost:8080/server");
-    List<String> serverUrls = Arrays.stream(urlsRaw.split(",")).map(String::trim)
-        .filter(s -> !s.isEmpty()).collect(Collectors.toList());
-
     // Number of consumer threads
     String threadsRaw = resolve("CONSUMER_THREADS", props, "consumer.threads", "10");
     int numThreads = Integer.parseInt(threadsRaw);
 
-    logger.info(
-        "ConsumerMain starting: threads=" + numThreads + ", servers=" + serverUrls + ", rabbitmq="
-            + RabbitMQConfig.HOST + ":" + RabbitMQConfig.PORT);
+    logger.info("ConsumerMain starting: threads=" + numThreads + ", redis=" + RedisConfig.HOST + ":"
+        + RedisConfig.PORT + ", rabbitmq=" + RabbitMQConfig.HOST + ":" + RabbitMQConfig.PORT);
 
-    ServerNotifier notifier = new ServerNotifier(serverUrls);
-    ConsumerManager conMgr = new ConsumerManager(numThreads, notifier);
+    RedisPublisher redisPublisher = new RedisPublisher();
+    ConsumerManager conMgr = new ConsumerManager(numThreads, redisPublisher);
 
     // Graceful shutdown on SIGTERM or Ctrl+C
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       logger.info("Shutdown signal received, stopping ConsumerManager...");
       conMgr.shutdown();
+      redisPublisher.close();
+      ConsumerMetrics.getInstance().stopReporting();
     }, "shutdown-hook"));
 
+    ConsumerMetrics.getInstance().startReporting();
     conMgr.start();  // ======== START =========
 
     // Keep main thread alive — ConsumerManager threads do the work

@@ -1,4 +1,4 @@
-package assign2.server.v2.rabbitmq;
+package assign2.server.v2.service.rabbitmq;
 
 import assign2.server.v2.config.RabbitMQConfig;
 import com.rabbitmq.client.Channel;
