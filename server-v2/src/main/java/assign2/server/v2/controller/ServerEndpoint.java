@@ -42,6 +42,7 @@ public class ServerEndpoint {
 
   @OnOpen
   public void onOpen(Session session, @PathParam("roomId") String roomId) {
+    session.setMaxIdleTimeout(300_000); // 5 minutes; 0 = container default
     RoomManager.addSession(roomId, session);
     logger.fine("Session opened: session=" + session.getId() + ", room=" + roomId);
     startRedisSubscriberOnce();
