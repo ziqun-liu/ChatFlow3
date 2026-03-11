@@ -43,27 +43,31 @@ public class RedisSubscriber {
       return;
     }
 
-    this.pubSub = new JedisPubSub() {
-      @Override
-      public void onPMessage(String pattern, String channel, String message) {
-        // channel = "room.3", message = QueueMessage JSON
-        handleMessage(channel, message);
-      }
-
-      @Override
-      public void onPSubscribe(String pattern, int subscribedChannels) {
-        logger.info("Redis psubscribe: pattern=" + pattern
-            + ", channels=" + subscribedChannels);
-      }
-    };
-
     this.subscriberThread = new Thread(() -> {
-      // Retry loop — reconnect if Redis drops
+      // Retry loop — reconnect if Redis drops.
+      // A fresh JedisPubSub must be created on every attempt: Jedis 5.x does not
+      // support reusing a JedisPubSub after disconnection because its internal
+      // subscribedChannels counter is never reset when the connection breaks
+      // ungracefully, leaving the object in a permanently broken state.
       while (!Thread.currentThread().isInterrupted()) {
+        JedisPubSub localPubSub = new JedisPubSub() {
+          @Override
+          public void onPMessage(String pattern, String channel, String message) {
+            // channel = "room.3", message = QueueMessage JSON
+            handleMessage(channel, message);
+          }
+
+          @Override
+          public void onPSubscribe(String pattern, int subscribedChannels) {
+            logger.fine("Redis psubscribe: pattern=" + pattern
+                + ", channels=" + subscribedChannels);
+          }
+        };
+        this.pubSub = localPubSub; // keep field current so stop() can punsubscribe()
         try (Jedis jedis = new Jedis(RedisConfig.HOST, RedisConfig.PORT)) {
-          logger.info("RedisSubscriber connecting: host=" + RedisConfig.HOST
+          logger.fine("RedisSubscriber connecting: host=" + RedisConfig.HOST
               + ", port=" + RedisConfig.PORT);
-          jedis.psubscribe(this.pubSub, CHANNEL_PATTERN);
+          jedis.psubscribe(localPubSub, CHANNEL_PATTERN);
           // psubscribe() returns only when unsubscribed intentionally (stop() called)
           break;
         } catch (Exception e) {

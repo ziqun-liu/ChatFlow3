@@ -1,5 +1,6 @@
 package assign2.server.v2.controller;
 
+import assign2.server.v2.service.ServerMetrics;
 import java.util.logging.Logger;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
@@ -17,11 +18,14 @@ public class AppLifecycle implements ServletContextListener {
   @Override
   public void contextInitialized(ServletContextEvent sce) {
     logger.info("AppLifecycle: context initialized.");
+    ServerMetrics.getInstance().init(ServerEndpoint::getMessagePublisher);
+    ServerMetrics.getInstance().startReporting();
   }
 
   @Override
   public void contextDestroyed(ServletContextEvent sce) {
     logger.info("AppLifecycle: context destroyed, shutting down resources...");
+    ServerMetrics.getInstance().stopReporting();
     ServerEndpoint.shutdown();
     logger.info("AppLifecycle: shutdown complete.");
   }

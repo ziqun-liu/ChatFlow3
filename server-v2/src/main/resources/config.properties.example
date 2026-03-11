@@ -5,6 +5,11 @@ rabbitmq.port=5672
 rabbitmq.user=guest
 rabbitmq.pass=guest
 rabbitmq.exchange=chat.exchange
+# Channel pool size: controls max concurrent RabbitMQ publishes.
+# Throughput ceiling ≈ pool.size / rabbitmq_confirm_latency_seconds.
+rabbitmq.channel.pool.size=100
+# 1=transient (fast, lost on RabbitMQ restart), 2=persistent (durable, slower)
+rabbitmq.delivery.mode=1
 
 # Redis connection config (local development)
 redis.host=localhost

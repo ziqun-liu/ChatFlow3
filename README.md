@@ -224,37 +224,28 @@ docker run -d --name redis-local \
 ```
 
 ### 3. Set up RabbitMQ queues
-
+Run from ChatFlow2/ root — creates exchange and 20 room queues
 ```bash
-# Run from ChatFlow2/ root — creates exchange and 20 room queues
 RABBITMQ_HOST=localhost RABBITMQ_USER=guest RABBITMQ_PASS=guest ./deployment/rabbitmq-setup.sh
 ```
 
 ### 4. Start server-v2
-
+Build and deploy WAR to local Tomcat
 ```bash
-export TOMCAT_DIRECTORY=~/Library/Tomcat
+cd server-v2 && mvn clean package -q
+  mv target/server-v2-1.0-SNAPSHOT.war target/server.war
+  cp target/server.war ~/Library/Tomcat/webapps/
+  ~/Library/Tomcat/bin/startup.sh
 ```
-
+Verify server is running
 ```bash
-# Build and deploy WAR to local Tomcat
-cd server-v2/
-mvn clean package
-mv target/server-v2-1.0-SNAPSHOT.war target/server.war
-cp target/server.war $TOMCAT_DIRECTORY/webapps/
-$TOMCAT_DIRECTORY/bin/startup.sh
-```
-
-```bash
-# Verify server is running
 curl http://localhost:8080/server/health
 ```
 
 ### 5. Start consumer
 
 ```bash
-cd consumer/
-mvn clean package
+cd consumer && mvn clean package -q
 java -jar target/consumer-1.0-SNAPSHOT.jar
 ```
 
@@ -263,8 +254,7 @@ Consumer defaults: `CONSUMER_THREADS=10`, connects to `localhost:5672` (RabbitMQ
 ### 6. Start client
 
 ```bash
-cd client/
-mvn clean package
+cd client && mvn clean package -q
 java -jar target/client-1.0-SNAPSHOT.jar
 ```
 
@@ -276,16 +266,40 @@ Environment variables are injected automatically by the deployment scripts.
 Before running, update the variable values at the top of `deployment/deploy-all.sh`
 (single source of truth — no need to edit the other scripts).
 
+#### 1. Deploy servers
 ```bash
 chmod +x deployment/deploy-all.sh
 ./deployment/deploy-all.sh
 ```
-
+#### 2.(a) Test with 1 instance with server1 private ip
+#### Check health using curl using public ip
 ```bash
-cd /client
-mvn clean package
-WS_URI="ws://cs6650-assignment2-lb-1697352352.us-west-2.elb.amazonaws.com/server/chat/" \
-java -jar target/client-1.0-SNAPSHOT.jar
+WS_URI="ws://172.31.22.27:8080/server/chat/" ./deployment/client-setup.sh
+```
+```bash
+ssh -i ~/.ssh/cs6650-assignment2.pem ec2-user@54.214.134.25 'curl http://localhost:8080/server/health'
+```
+#### 2.(b) Test with 2 servers
+```bash
+WS_URI="ws://cs6650-lb-2-1866624947.us-west-2.elb.amazonaws.com/server/chat/" ./deployment/client-setup.sh
+```
+#### 2.(c) Test with 4 servers
+```bash
+WS_URI="ws://cs6650-lb-2-1866624947.us-west-2.elb.amazonaws.com/server/chat/" \
+    ./deployment/client-setup.sh
+```
+#### 3. Follow Client Metrics
+```bash
+ssh -i ~/.ssh/cs6650-assignment2.pem ec2-user@184.32.148.42 'tail -f /opt/client/client.log'
+```
+#### 4. Follow Consumer Metrics
+```bash
+ssh -i ~/.ssh/cs6650-assignment2.pem ec2-user@54.212.1.204 'tail -f /opt/consumer/consumer.log'
+```
+
+#### 5. Follow Server Metrics — publish rate + system
+```bash
+ssh -i ~/.ssh/cs6650-assignment2.pem ec2-user@54.214.134.25 'tail -f /opt/tomcat9/logs/catalina.out'
 ```
 
 ### Environment Variables

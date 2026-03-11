@@ -1,5 +1,11 @@
 package assign2.consumer.service;
 
+import com.sun.management.OperatingSystemMXBean;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryUsage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +54,12 @@ public class ConsumerMetrics {
   private final AtomicLong latencyCount   = new AtomicLong(0);
   private final AtomicLong latencyMinNs   = new AtomicLong(Long.MAX_VALUE);
   private final AtomicLong latencyMaxNs   = new AtomicLong(0);
+
+  // ── System metrics state (for delta calculations between reports) ─────────
+  private volatile long prevNetRxBytes  = -1;
+  private volatile long prevNetTxBytes  = -1;
+  private volatile long prevDiskReadSectors  = -1;
+  private volatile long prevDiskWriteSectors = -1;
 
   // ── Scheduler ─────────────────────────────────────────────────────────────
   private ScheduledExecutorService scheduler;
@@ -133,6 +145,7 @@ public class ConsumerMetrics {
     double maxMs = this.latencyMaxNs.get() / 1_000_000.0;
     double avgMs = count > 0 ? this.latencyTotalNs.get() / 1_000_000.0 / count : 0.0;
 
+    String sys = systemSnapshot();
     logger.info(String.format(
         "=== ConsumerMetrics ===%n"
             + "  Throughput         : %.1f msg/s (last %ds)%n"
@@ -140,12 +153,90 @@ public class ConsumerMetrics {
             + "  RabbitMQ ack       : %-8d%n"
             + "  RabbitMQ nack      : requeue=%-6d discard=%d%n"
             + "  Duplicate discard  : %d%n"
-            + "  Latency (all msgs) : min=%.2fms avg=%.2fms max=%.2fms count=%d",
+            + "  Latency (all msgs) : min=%.2fms avg=%.2fms max=%.2fms count=%d%n"
+            + "%s",
         throughput, REPORT_INTERVAL_SECONDS,
         this.redisPublishSuccess.get(), this.redisPublishFailure.get(),
         this.rabbitmqAck.get(),
         this.rabbitmqNackRequeue.get(), this.rabbitmqNackDiscard.get(),
         this.duplicateDiscard.get(),
-        minMs, avgMs, maxMs, count));
+        minMs, avgMs, maxMs, count, sys));
+  }
+
+  // ── System Metrics ────────────────────────────────────────────────────────
+
+  private String systemSnapshot() {
+    StringBuilder sb = new StringBuilder();
+
+    // CPU + Memory via JVM MXBeans
+    try {
+      OperatingSystemMXBean os =
+          (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+      double cpuProcess = os.getProcessCpuLoad() * 100.0;
+      double cpuSystem  = os.getSystemCpuLoad()  * 100.0;
+      MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+      long heapUsedMb  = heap.getUsed()  / (1024 * 1024);
+      long heapMaxMb   = heap.getMax()   / (1024 * 1024);
+      sb.append(String.format(
+          "  CPU (process/system): %.1f%% / %.1f%%%n"
+        + "  Heap memory        : %d MB used / %d MB max",
+          cpuProcess, cpuSystem, heapUsedMb, heapMaxMb));
+    } catch (Exception e) {
+      sb.append("  CPU/Memory         : N/A");
+    }
+
+    // Network I/O — /proc/net/dev (Linux only)
+    try (BufferedReader br = new BufferedReader(new FileReader("/proc/net/dev"))) {
+      long rxBytes = 0, txBytes = 0;
+      String line;
+      br.readLine(); br.readLine(); // skip 2 header lines
+      while ((line = br.readLine()) != null) {
+        line = line.trim();
+        if (line.startsWith("lo:")) continue;
+        String[] parts = line.split("\\s+");
+        // format: iface: rx_bytes ... tx_bytes ...
+        // after split: [0]=iface, [1]=rx_bytes, [9]=tx_bytes
+        if (parts.length >= 10) {
+          rxBytes += Long.parseLong(parts[1]);
+          txBytes += Long.parseLong(parts[9]);
+        }
+      }
+      long rxDelta = prevNetRxBytes < 0 ? 0 : rxBytes - prevNetRxBytes;
+      long txDelta = prevNetTxBytes < 0 ? 0 : txBytes - prevNetTxBytes;
+      prevNetRxBytes = rxBytes; prevNetTxBytes = txBytes;
+      sb.append(String.format("%n  Net I/O (delta)    : RX=%s TX=%s",
+          humanBytes(rxDelta), humanBytes(txDelta)));
+    } catch (IOException e) {
+      sb.append("\n  Net I/O            : N/A");
+    }
+
+    // Disk I/O — /proc/diskstats (Linux only)
+    try (BufferedReader br = new BufferedReader(new FileReader("/proc/diskstats"))) {
+      long readSectors = 0, writeSectors = 0;
+      String line;
+      while ((line = br.readLine()) != null) {
+        String[] parts = line.trim().split("\\s+");
+        // skip loop/ram devices; real disks: sd*, nvme*, xvd*
+        if (parts.length >= 13 && parts[2].matches("(sd|nvme|xvd).*")) {
+          readSectors  += Long.parseLong(parts[5]);
+          writeSectors += Long.parseLong(parts[9]);
+        }
+      }
+      long rdDelta = prevDiskReadSectors  < 0 ? 0 : (readSectors  - prevDiskReadSectors)  * 512;
+      long wrDelta = prevDiskWriteSectors < 0 ? 0 : (writeSectors - prevDiskWriteSectors) * 512;
+      prevDiskReadSectors = readSectors; prevDiskWriteSectors = writeSectors;
+      sb.append(String.format("%n  Disk I/O (delta)   : read=%s write=%s",
+          humanBytes(rdDelta), humanBytes(wrDelta)));
+    } catch (IOException e) {
+      sb.append("\n  Disk I/O           : N/A");
+    }
+
+    return sb.toString();
+  }
+
+  private static String humanBytes(long bytes) {
+    if (bytes < 1024)             return bytes + " B";
+    if (bytes < 1024 * 1024)     return String.format("%.1f KB", bytes / 1024.0);
+    return String.format("%.1f MB", bytes / (1024.0 * 1024));
   }
 }

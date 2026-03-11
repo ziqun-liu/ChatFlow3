@@ -3,8 +3,10 @@ package assign2.consumer.service;
 import assign2.consumer.config.RedisConfig;
 import assign2.consumer.model.QueueMessage;
 import java.util.logging.Logger;
+import java.time.Duration;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.params.SetParams;
 
 /**
@@ -23,8 +25,14 @@ public class RedisPublisher {
   private final JedisPool jedisPool;
 
   public RedisPublisher() {
-    this.jedisPool = new JedisPool(RedisConfig.HOST, RedisConfig.PORT);
-    logger.info("RedisPublisher initialized: host=" + RedisConfig.HOST + ", port=" + RedisConfig.PORT);
+    JedisPoolConfig poolConfig = new JedisPoolConfig();
+    poolConfig.setMaxTotal(RedisConfig.POOL_MAX_TOTAL);
+    poolConfig.setMaxWait(Duration.ofMillis(RedisConfig.POOL_MAX_WAIT_MS));
+    poolConfig.setTestOnBorrow(true);
+    this.jedisPool = new JedisPool(poolConfig, RedisConfig.HOST, RedisConfig.PORT);
+    logger.info("RedisPublisher initialized: host=" + RedisConfig.HOST + ", port=" + RedisConfig.PORT
+        + ", poolMaxTotal=" + RedisConfig.POOL_MAX_TOTAL
+        + ", poolMaxWaitMs=" + RedisConfig.POOL_MAX_WAIT_MS);
   }
 
   /**

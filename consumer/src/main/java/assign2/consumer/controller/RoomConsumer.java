@@ -27,7 +27,6 @@ import java.util.logging.Logger;
 public class RoomConsumer implements Runnable {
 
   private static final Logger logger = Logger.getLogger(RoomConsumer.class.getName());
-  private static final int PREFETCH_COUNT = 10;
 
   private final List<String> roomIds;
   private final MessageProcessor messageProcessor;
@@ -71,7 +70,7 @@ public class RoomConsumer implements Runnable {
         "consumer-" + this.roomIds); Channel channel = connection.createChannel()) {
 
       // Limit unacknowledged messages in-flight per consumer thread
-      channel.basicQos(PREFETCH_COUNT);
+      channel.basicQos(RabbitMQConfig.PREFETCH_COUNT);
 
       // Declare queues and register push-based consumer for each assigned room
       for (String roomId : this.roomIds) {

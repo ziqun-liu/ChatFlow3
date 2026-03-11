@@ -17,14 +17,19 @@ public class RedisConfig {
 
   public static final String HOST;
   public static final int PORT;
+  public static final int POOL_MAX_TOTAL;
+  public static final long POOL_MAX_WAIT_MS;
 
   static {
     Properties props = loadProperties();
 
-    HOST = resolve("REDIS_HOST", props, "redis.host", "localhost");
-    PORT = Integer.parseInt(resolve("REDIS_PORT", props, "redis.port", "6379"));
+    HOST          = resolve("REDIS_HOST",          props, "redis.host",           "localhost");
+    PORT          = Integer.parseInt(resolve("REDIS_PORT",          props, "redis.port",           "6379"));
+    POOL_MAX_TOTAL  = Integer.parseInt(resolve("REDIS_POOL_MAX_TOTAL",  props, "redis.pool.maxTotal",   "20"));
+    POOL_MAX_WAIT_MS = Long.parseLong( resolve("REDIS_POOL_MAX_WAIT_MS", props, "redis.pool.maxWaitMs", "2000"));
 
-    logger.info("RedisConfig loaded: host=" + HOST + ", port=" + PORT);
+    logger.info("RedisConfig loaded: host=" + HOST + ", port=" + PORT
+        + ", poolMaxTotal=" + POOL_MAX_TOTAL + ", poolMaxWaitMs=" + POOL_MAX_WAIT_MS);
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

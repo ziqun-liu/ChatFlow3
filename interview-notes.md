@@ -177,3 +177,69 @@ Killed server-1 (54.214.134.25) mid load test while 500,000 messages were in fli
 
 ### Conclusion
 The system handles server failure gracefully: zero message loss, automatic reconnection, and negligible latency impact under failover conditions.
+
+---
+
+## Q5: 你们做了哪些优化，把吞吐量从 ~2,000/s 提升到 ~6,000/s？
+
+### 第一阶段：找到真正的瓶颈（吞吐量卡在 ~2,167/s）
+
+调了很多参数（`numSenders`、`CONSUMER_THREADS`、`REDIS_POOL_MAX_TOTAL`），吞吐量完全没变化。
+
+**根因（Little's Law）**：`ChannelPool=20`，每个 channel 同步 `waitForConfirms`，`deliveryMode=2` 要写 EBS 磁盘再 confirm。**磁盘 IOPS 是天花板**，其他参数调多少都没用。
+
+### 第二阶段：消灭 EBS 磁盘瓶颈（~2,167/s → ~5,165/s，+138%）
+
+**改动**：`RABBITMQ_DELIVERY_MODE` 2 → 1（transient，消息只存内存，不写磁盘）
+
+- `MessagePublisher.java`：`.deliveryMode(RabbitMQConfig.DELIVERY_MODE)`
+- `deploy-all.sh`：`export RABBITMQ_DELIVERY_MODE="1"`
+
+同期配置化改造（消除硬编码）：
+- `ChannelPool` 大小硬编码 20 → 读 `RABBITMQ_CHANNEL_POOL_SIZE`（设为 100）
+- `JedisPool` 从默认 8 连接 → 显式配置 `REDIS_POOL_MAX_TOTAL`
+- Consumer `PREFETCH_COUNT` 硬编码 10 → 读 `RABBITMQ_PREFETCH`（设为 100）
+
+### 第三阶段：消灭互联网 RTT 瓶颈（Client 迁到 EC2）
+
+Mac 本地跑 client，互联网 RTT ~80ms，512 workers / 97ms ≈ 5,165/s 是天花板。
+
+**改动**：新建 `deployment/client-setup.sh`，把 client 部署到 AWS us-west-2 同 region EC2。
+
+- Min latency 从 ~80ms 降到 ~1ms（VPC 内部）
+- 吞吐量维持 ~4,694/s（此时 RabbitMQ t3.micro 成为新瓶颈）
+
+### 第四阶段：升级 RabbitMQ 实例 + 修复 Consumer 双倍 Redis 开销（→ ~6,000+/s）
+
+**问题 1**：RabbitMQ t3.micro（1 vCPU）扛 400 个并发 channel（4 server × 100），CPU 成为瓶颈。
+→ RabbitMQ EC2 升级到 **t3.small**（2 vCPU，2 GB RAM）
+
+**问题 2**：Consumer 每条消息做 **2 次阻塞 Redis 调用**：
+- `isDuplicate()` → Redis SET NX（第一次投递根本不可能重复，纯粹浪费）
+- `publish()` → Redis PUBLISH
+
+→ `DeliveryHandler.java`：加 `isRedeliver` 守卫，只在重投递时才调 `isDuplicate()`
+
+```java
+// Before
+if (redisPublisher.isDuplicate(msg.getMessageId())) { ... }
+
+// After
+if (isRedeliver && redisPublisher.isDuplicate(msg.getMessageId())) { ... }
+```
+
+**问题 3**：Consumer 线程不够。
+→ `CONSUMER_THREADS` 20 → 40，`REDIS_POOL_MAX_TOTAL` 40 → 80
+
+### 汇总
+
+| 阶段 | 核心改动 | 吞吐量 |
+|---|---|---|
+| 基线 | deliveryMode=2, ChannelPool=20 | ~2,167/s |
+| deliveryMode=1 + ChannelPool=100 | 消灭 EBS 磁盘瓶颈 | ~5,165/s |
+| Client 迁到 EC2 | 消灭互联网 RTT | ~4,694/s |
+| RabbitMQ t3.small + isDuplicate 优化 + threads×2 | 消灭 broker CPU + Consumer Redis 双倍开销 | ~6,000+/s |
+
+### 面试关键句
+
+> "The bottleneck wasn't where I thought. Tuning thread counts and pool sizes had zero effect because the real ceiling was EBS disk IOPS — RabbitMQ's persistent delivery mode required a disk write before every confirm. Switching to transient mode tripled throughput instantly. The next bottleneck was client-side network RTT, which I eliminated by moving the load tester into the same AWS region. Finally I found the consumer was making two sequential blocking Redis calls per message — a dedup check that was completely unnecessary on first delivery. Guarding it with `isRedeliver` cut per-message Redis work in half."

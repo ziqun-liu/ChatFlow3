@@ -6,6 +6,7 @@ import assign2.server.v2.service.rabbitmq.ChannelPool;
 import assign2.server.v2.service.rabbitmq.CircuitBreaker;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 /**
@@ -29,6 +30,7 @@ public class MessagePublisher {
 
   private final ChannelPool channelPool;
   private final CircuitBreaker circuitBreaker;
+  private final AtomicLong publishCount = new AtomicLong();
 
   public MessagePublisher(ChannelPool channelPool) {
     this.channelPool = channelPool;
@@ -57,7 +59,7 @@ public class MessagePublisher {
       byte[] body = queueMsg.toJson().getBytes("UTF-8");
 
       AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().contentType(
-              "application/json").deliveryMode(2)           // persistent
+              "application/json").deliveryMode(RabbitMQConfig.DELIVERY_MODE)  // 1=transient, 2=persistent
           .messageId(queueMsg.getMessageId()).build();
 
       channel.basicPublish(RabbitMQConfig.EXCHANGE, routingKey, props, body);
@@ -66,6 +68,7 @@ public class MessagePublisher {
       boolean confirmed = channel.waitForConfirms(CONFIRM_TIMEOUT_MS);
       if (confirmed) {
         this.circuitBreaker.recordSuccess();
+        this.publishCount.incrementAndGet();
       } else {
         logger.warning("RabbitMQ nack for messageId=" + queueMsg.getMessageId());
         this.circuitBreaker.recordFailure();
@@ -86,6 +89,8 @@ public class MessagePublisher {
       this.channelPool.returnChannel(channel);
     }
   }
+
+  public long getPublishCount() { return publishCount.get(); }
 
   public void logMetrics() {
     this.circuitBreaker.summary();

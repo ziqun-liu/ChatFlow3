@@ -22,8 +22,6 @@ import java.util.logging.Logger;
 public class ChannelPool {
 
   private static final Logger logger = Logger.getLogger(ChannelPool.class.getName());
-  private static final int POOL_SIZE = 20;
-
   private static volatile ChannelPool instance;
 
   private final Connection connection;
@@ -36,10 +34,11 @@ public class ChannelPool {
     factory.setUsername(RabbitMQConfig.USERNAME);
     factory.setPassword(RabbitMQConfig.PASSWORD);
 
+    int poolSize = RabbitMQConfig.CHANNEL_POOL_SIZE;
     this.connection = factory.newConnection("server-v2-pool");
-    this.pool = new ArrayBlockingQueue<>(POOL_SIZE);
+    this.pool = new ArrayBlockingQueue<>(poolSize);
 
-    for (int i = 0; i < POOL_SIZE; i++) {
+    for (int i = 0; i < poolSize; i++) {
       Channel ch = connection.createChannel();
       // Declare exchange once per channel — idempotent, safe to repeat
       ch.exchangeDeclare(RabbitMQConfig.EXCHANGE, RabbitMQConfig.EXCHANGE_TYPE, true);
@@ -47,7 +46,7 @@ public class ChannelPool {
       ch.confirmSelect();
       pool.add(ch);
     }
-    logger.info("ChannelPool initialized: " + POOL_SIZE + " channels, exchange="
+    logger.info("ChannelPool initialized: " + poolSize + " channels, exchange="
         + RabbitMQConfig.EXCHANGE);
   }
 

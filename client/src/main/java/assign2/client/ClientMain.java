@@ -11,6 +11,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class ClientMain {
@@ -94,7 +95,7 @@ public class ClientMain {
 
   // ============================== Main Phase ==============================
   private static void runMainPhase() throws Exception {
-    int numSenders = Math.max(200, Runtime.getRuntime().availableProcessors() * 16);
+    int numSenders = Math.max(512, Runtime.getRuntime().availableProcessors() * 16);
 
     // roomId -> BlockingQueue
     Map<Integer, BlockingQueue<ChatMessage>> queues = new HashMap<>();
@@ -113,7 +114,18 @@ public class ClientMain {
 
     mainMetrics.start();
 
-    // 2. Start the consumer - concurrent with the generator
+    // Queue depth sampler — polls every 500ms, tracks peak and average across all rooms
+    ScheduledExecutorService queueSampler = Executors.newSingleThreadScheduledExecutor(r -> {
+      Thread t = new Thread(r, "queue-depth-sampler");
+      t.setDaemon(true);
+      return t;
+    });
+    queueSampler.scheduleAtFixedRate(() -> {
+      int total = queues.values().stream().mapToInt(BlockingQueue::size).sum();
+      mainMetrics.recordQueueDepth(total);
+    }, 0, 500, TimeUnit.MILLISECONDS);
+
+    // 2. Start the sender - concurrent with the generator
     ExecutorService mainExecutor = Executors.newFixedThreadPool(numSenders);
     for (int workerId = 0; workerId < numSenders; workerId++) {
       int roomId = workerId % NUM_ROOMS + 1;
@@ -131,6 +143,7 @@ public class ClientMain {
 
     mainExecutor.shutdown();
     mainExecutor.awaitTermination(10, TimeUnit.MINUTES);
+    queueSampler.shutdown();
     mainMetrics.stop();
     mainConnMgr.closeAll();
 

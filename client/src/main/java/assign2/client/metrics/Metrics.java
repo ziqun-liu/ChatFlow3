@@ -16,8 +16,14 @@ public class Metrics {
   private final LongAdder failureCount = new LongAdder();
   private final LongAdder sendAttempts = new LongAdder();
   private final LongAdder connectionCount = new LongAdder();
+  private final LongAdder connectionFailureCount = new LongAdder();
   private final LongAdder reconnectionCount = new LongAdder();
   private final LongAdder retrySuccessCount = new LongAdder();
+  private final LongAdder retryCount = new LongAdder();
+
+  private final AtomicLong peakQueueDepth = new AtomicLong(0);
+  private final AtomicLong totalQueueDepthSamples = new AtomicLong(0);
+  private final AtomicLong queueDepthSampleCount = new AtomicLong(0);
   private final ConcurrentLinkedQueue<Long> latencies = new ConcurrentLinkedQueue<>();
   private final ConcurrentHashMap<Integer, AtomicLong> roomSuccess = new ConcurrentHashMap<>();
   private final ConcurrentLinkedQueue<String> csvLines = new ConcurrentLinkedQueue<>();
@@ -63,12 +69,38 @@ public class Metrics {
     this.connectionCount.increment();
   }
 
+  public void recordConnectionFailure() {
+    this.connectionFailureCount.increment();
+  }
+
   public void recordReconnection() {
     this.reconnectionCount.increment();
   }
 
   public void recordRetrySuccess() {
     this.retrySuccessCount.increment();
+  }
+
+  public void recordRetry() {
+    this.retryCount.increment();
+  }
+
+  public void recordQueueDepth(int total) {
+    long cur;
+    do {
+      cur = this.peakQueueDepth.get();
+    } while (total > cur && !this.peakQueueDepth.compareAndSet(cur, total));
+    this.totalQueueDepthSamples.addAndGet(total);
+    this.queueDepthSampleCount.incrementAndGet();
+  }
+
+  public long getPeakQueueDepth() {
+    return this.peakQueueDepth.get();
+  }
+
+  public double getAvgQueueDepth() {
+    long count = this.queueDepthSampleCount.get();
+    return count > 0 ? (double) this.totalQueueDepthSamples.get() / count : 0.0;
   }
 
   public long getSuccessCount() {
@@ -87,8 +119,16 @@ public class Metrics {
     return this.connectionCount.sum();
   }
 
+  public long getConnectionFailureCount() {
+    return this.connectionFailureCount.sum();
+  }
+
   public long getReconnectionCount() {
     return this.reconnectionCount.sum();
+  }
+
+  public long getRetryCount() {
+    return this.retryCount.sum();
   }
 
   public long getTotalProcessed() {
@@ -119,7 +159,8 @@ public class Metrics {
     if (bucketKey >= 0) {
       throughputBuckets.computeIfAbsent(bucketKey, k -> new AtomicLong(0)).incrementAndGet();
     }
-    csvLines.add(sendTimestampMs + "," + messageType + "," + latencyMs + "," + statusCode + "," + roomId);
+    csvLines.add(
+        sendTimestampMs + "," + messageType + "," + latencyMs + "," + statusCode + "," + roomId);
   }
 
   public void writeCsv(String filePath) {
@@ -140,43 +181,32 @@ public class Metrics {
   public void writeChart(String filePath) {
     try {
       new java.io.File(filePath).getParentFile().mkdirs();
-      long maxBucket = throughputBuckets.keySet().stream().mapToLong(Long::longValue).max().orElse(0);
+      long maxBucket = throughputBuckets.keySet().stream().mapToLong(Long::longValue).max()
+          .orElse(0);
       StringBuilder labels = new StringBuilder();
       StringBuilder data = new StringBuilder();
       for (long b = 0; b <= maxBucket; b++) {
-        if (b > 0) { labels.append(","); data.append(","); }
+        if (b > 0) {
+          labels.append(",");
+          data.append(",");
+        }
         labels.append("\"").append(b * 10).append("s\"");
         long count = throughputBuckets.getOrDefault(b, new AtomicLong(0)).get();
         data.append(String.format("%.0f", count / 10.0));
       }
-      String html = "<!DOCTYPE html>\n<html>\n<head>\n"
-          + "<title>Throughput Over Time</title>\n"
+      String html = "<!DOCTYPE html>\n<html>\n<head>\n" + "<title>Throughput Over Time</title>\n"
           + "<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>\n"
-          + "</head>\n<body>\n"
-          + "<h2>Throughput Over Time (10s buckets)</h2>\n"
-          + "<canvas id=\"chart\" width=\"900\" height=\"400\"></canvas>\n"
-          + "<script>\n"
-          + "new Chart(document.getElementById('chart'), {\n"
-          + "  type: 'line',\n"
-          + "  data: {\n"
-          + "    labels: [" + labels + "],\n"
-          + "    datasets: [{\n"
-          + "      label: 'Throughput (msg/s)',\n"
-          + "      data: [" + data + "],\n"
+          + "</head>\n<body>\n" + "<h2>Throughput Over Time (10s buckets)</h2>\n"
+          + "<canvas id=\"chart\" width=\"900\" height=\"400\"></canvas>\n" + "<script>\n"
+          + "new Chart(document.getElementById('chart'), {\n" + "  type: 'line',\n" + "  data: {\n"
+          + "    labels: [" + labels + "],\n" + "    datasets: [{\n"
+          + "      label: 'Throughput (msg/s)',\n" + "      data: [" + data + "],\n"
           + "      borderColor: 'rgb(75, 192, 192)',\n"
-          + "      backgroundColor: 'rgba(75, 192, 192, 0.1)',\n"
-          + "      tension: 0.1,\n"
-          + "      fill: true\n"
-          + "    }]\n"
-          + "  },\n"
-          + "  options: {\n"
-          + "    scales: {\n"
+          + "      backgroundColor: 'rgba(75, 192, 192, 0.1)',\n" + "      tension: 0.1,\n"
+          + "      fill: true\n" + "    }]\n" + "  },\n" + "  options: {\n" + "    scales: {\n"
           + "      y: { beginAtZero: true, title: { display: true, text: 'msg/s' } },\n"
-          + "      x: { title: { display: true, text: 'Time (seconds)' } }\n"
-          + "    }\n"
-          + "  }\n"
-          + "});\n"
-          + "</script>\n</body>\n</html>\n";
+          + "      x: { title: { display: true, text: 'Time (seconds)' } }\n" + "    }\n" + "  }\n"
+          + "});\n" + "</script>\n</body>\n</html>\n";
       try (PrintWriter pw = new PrintWriter(new FileWriter(filePath))) {
         pw.print(html);
       }
@@ -199,15 +229,14 @@ public class Metrics {
       long count = throughputBuckets.getOrDefault(b, new AtomicLong(0)).get();
       double msgPerSec = count / 10.0;
       int bars = (int) (count * barWidth / maxCount);
-      System.out.printf("  %4ds-%4ds | %-40s %,.0f msg/s%n",
-          b * 10, (b + 1) * 10, "█".repeat(bars), msgPerSec);
+      System.out.printf("  %4ds-%4ds | %-40s %,.0f msg/s%n", b * 10, (b + 1) * 10, "█".repeat(bars),
+          msgPerSec);
     }
   }
 
   public void messageTypeDistribution() {
     System.out.println("  Message type distribution:");
-    messageTypeCounts.entrySet().stream()
-        .sorted(Map.Entry.comparingByKey())
+    messageTypeCounts.entrySet().stream().sorted(Map.Entry.comparingByKey())
         .forEach(e -> System.out.printf("    %-6s: %,d%n", e.getKey(), e.getValue().get()));
   }
 
@@ -270,7 +299,12 @@ public class Metrics {
     System.out.printf("  Wall time           : %.3f seconds%n", this.elapsedSeconds());
     System.out.printf("  Throughput          : %,.2f msg/s%n", this.throughput());
     System.out.printf("  Total connections   : %,d%n", this.connectionCount.sum());
+    System.out.printf("  Connection failures : %,d%n", this.connectionFailureCount.sum());
     System.out.printf("  Reconnections       : %,d%n", this.reconnectionCount.sum());
+    System.out.printf("  Total retries       : %,d%n", this.retryCount.sum());
+    System.out.printf("  Client blocking queue peak depth    : %,d%n", this.getPeakQueueDepth());
+    System.out.printf("  Client blocking queue avg queue depth     : %.1f%n",
+        this.getAvgQueueDepth());
     System.out.println("========================================");
   }
 }

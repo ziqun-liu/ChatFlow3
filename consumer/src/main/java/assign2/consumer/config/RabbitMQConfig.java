@@ -20,6 +20,7 @@ public class RabbitMQConfig {
   public static final String USERNAME;
   public static final String PASSWORD;
   public static final String EXCHANGE;
+  public static final int PREFETCH_COUNT;
   public static final String EXCHANGE_TYPE = "topic";
   public static final int ROOM_COUNT = 20;
   public static final String DLX_EXCHANGE = "chat.dlx";
@@ -32,10 +33,11 @@ public class RabbitMQConfig {
     PORT     = Integer.parseInt(resolve("RABBITMQ_PORT", props, "rabbitmq.port", "5672"));
     USERNAME = resolve("RABBITMQ_USER", props, "rabbitmq.user", "guest");
     PASSWORD = resolve("RABBITMQ_PASS", props, "rabbitmq.pass", "guest");
-    EXCHANGE = resolve("RABBITMQ_EXCHANGE", props, "rabbitmq.exchange", "chat.exchange");
+    EXCHANGE      = resolve("RABBITMQ_EXCHANGE", props, "rabbitmq.exchange", "chat.exchange");
+    PREFETCH_COUNT = Integer.parseInt(resolve("RABBITMQ_PREFETCH", props, "rabbitmq.prefetch", "50"));
 
     logger.info("RabbitMQConfig loaded: host=" + HOST + ", port=" + PORT
-        + ", exchange=" + EXCHANGE + ", user=" + USERNAME);
+        + ", exchange=" + EXCHANGE + ", user=" + USERNAME + ", prefetch=" + PREFETCH_COUNT);
   }
 
   /**

@@ -45,6 +45,7 @@ public class SenderWorker implements Runnable {
 
   private void sendWithRetry(ChatMessage msg) throws InterruptedException {
     for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (attempt > 0) { this.metrics.recordRetry(); }
       this.connMgr.acquire(this.roomId);
       try {
         ClientEndpoint client = this.connMgr.conn(this.roomId);

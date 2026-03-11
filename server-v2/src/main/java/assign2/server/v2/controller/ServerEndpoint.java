@@ -95,7 +95,7 @@ public class ServerEndpoint {
 
     // 5. ACK back to sender — only after RabbitMQ confirms receipt
     if (confirmed) {
-      logger.info(
+      logger.fine(
           "roomId=" + roomId + ",messageType=" + messageType + ",messageId=" + chatMsg.getMessageId() + " gets broadcasted");
       sendAck(session, chatMsg.getMessageId());
     } else {
@@ -154,6 +154,9 @@ public class ServerEndpoint {
       }
     }
   }
+
+  /** Returns the lazily-initialized publisher, or null if no connection has arrived yet. */
+  public static MessagePublisher getMessagePublisher() { return publisher; }
 
   /** Called by AppLifecycle on WAR undeploy to release RabbitMQ + Redis resources. */
   public static void shutdown() {

@@ -79,6 +79,7 @@ public class ConnectionManager {
     ClientEndpoint endpoint = new ClientEndpoint(uri);
     boolean connected = endpoint.connectBlocking(10, TimeUnit.SECONDS);
     if (!connected) {
+      metrics.recordConnectionFailure();
       throw new RuntimeException("Failed to connect to " + serverBaseUrl + roomId);
     }
     metrics.recordConnection();

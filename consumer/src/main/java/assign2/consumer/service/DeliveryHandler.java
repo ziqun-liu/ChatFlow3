@@ -48,8 +48,8 @@ public class DeliveryHandler {
 
     QueueMessage msg = result.getMessage();
 
-    // Dedup check — skip if already processed (nack+requeue duplicate)
-    if (redisPublisher.isDuplicate(msg.getMessageId())) {
+    // Dedup check — only needed on redeliveries; first-delivery messages cannot be duplicates
+    if (isRedeliver && redisPublisher.isDuplicate(msg.getMessageId())) {
       channel.basicAck(deliveryTag, false);
       ConsumerMetrics.getInstance().recordDuplicateDiscard();
       ConsumerMetrics.getInstance().recordLatency(latencyNs);
@@ -83,7 +83,7 @@ public class DeliveryHandler {
 
   private void logOutcome(String messageId, String roomId, String messageType, String outcome,
       long latencyNs, boolean isRedeliver) {
-    logger.info(String.format(
+    logger.fine(String.format(
         "DELIVERY messageId=%s roomId=%s messageType=%s outcome=%s latencyMs=%.2f redeliver=%b",
         messageId, roomId, messageType, outcome, latencyNs / 1_000_000.0, isRedeliver));
   }

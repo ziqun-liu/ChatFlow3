@@ -6,11 +6,10 @@ import java.util.Properties;
 import java.util.logging.Logger;
 
 /**
- * RabbitMQ configuration loader.
- * Priority: env var > JVM system property (-D) > config.properties > hardcoded defaults.
- * Environment variables: RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS
- * JVM properties:        RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS
- *                        (set via CATALINA_OPTS=-DRABBITMQ_HOST=... for Tomcat deployments)
+ * RabbitMQ configuration loader. Priority: env var > JVM system property (-D) > config.properties >
+ * hardcoded defaults. Environment variables: RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER,
+ * RABBITMQ_PASS JVM properties:        RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS
+ * (set via CATALINA_OPTS=-DRABBITMQ_HOST=... for Tomcat deployments)
  */
 public class RabbitMQConfig {
 
@@ -22,20 +21,27 @@ public class RabbitMQConfig {
   public static final String USERNAME;
   public static final String PASSWORD;
   public static final String EXCHANGE;
+  public static final int CHANNEL_POOL_SIZE;
+  public static final int DELIVERY_MODE;
   public static final String EXCHANGE_TYPE = "topic";
   public static final int ROOM_COUNT = 20;
 
   static {
     Properties props = loadProperties();
 
-    HOST     = resolve("RABBITMQ_HOST", props, "rabbitmq.host", "localhost");
-    PORT     = Integer.parseInt(resolve("RABBITMQ_PORT", props, "rabbitmq.port", "5672"));
+    HOST = resolve("RABBITMQ_HOST", props, "rabbitmq.host", "localhost");
+    PORT = Integer.parseInt(resolve("RABBITMQ_PORT", props, "rabbitmq.port", "5672"));
     USERNAME = resolve("RABBITMQ_USER", props, "rabbitmq.user", "guest");
     PASSWORD = resolve("RABBITMQ_PASS", props, "rabbitmq.pass", "guest");
     EXCHANGE = resolve("RABBITMQ_EXCHANGE", props, "rabbitmq.exchange", "chat.exchange");
+    CHANNEL_POOL_SIZE = Integer.parseInt(
+        resolve("RABBITMQ_CHANNEL_POOL_SIZE", props, "rabbitmq.channel.pool.size", "100"));
+    DELIVERY_MODE = Integer.parseInt(
+        resolve("RABBITMQ_DELIVERY_MODE", props, "rabbitmq.delivery.mode", "1"));
 
-    logger.info("RabbitMQConfig loaded: host=" + HOST + ", port=" + PORT
-        + ", exchange=" + EXCHANGE + ", user=" + USERNAME);
+    logger.info("RabbitMQConfig loaded: host=" + HOST + ", port=" + PORT + ", exchange=" + EXCHANGE
+        + ", user=" + USERNAME + ", channelPoolSize=" + CHANNEL_POOL_SIZE
+        + ", deliveryMode=" + DELIVERY_MODE);
   }
 
   /**
@@ -54,21 +60,27 @@ public class RabbitMQConfig {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  private static String resolve(String envKey, Properties props,
-      String propKey, String defaultValue) {
+  private static String resolve(String envKey, Properties props, String propKey,
+      String defaultValue) {
     String envVal = System.getenv(envKey);
-    if (envVal != null && !envVal.isEmpty()) return envVal;
+    if (envVal != null && !envVal.isEmpty()) {
+      return envVal;
+    }
     String sysProp = System.getProperty(envKey);  // -DRABBITMQ_HOST=... via CATALINA_OPTS
-    if (sysProp != null && !sysProp.isEmpty()) return sysProp;
+    if (sysProp != null && !sysProp.isEmpty()) {
+      return sysProp;
+    }
     String propVal = props.getProperty(propKey);
-    if (propVal != null && !propVal.isEmpty()) return propVal;
+    if (propVal != null && !propVal.isEmpty()) {
+      return propVal;
+    }
     return defaultValue;
   }
 
   private static Properties loadProperties() {
     Properties props = new Properties();
-    try (InputStream is = RabbitMQConfig.class
-        .getClassLoader().getResourceAsStream(PROPERTIES_FILE)) {
+    try (InputStream is = RabbitMQConfig.class.getClassLoader()
+        .getResourceAsStream(PROPERTIES_FILE)) {
       if (is != null) {
         props.load(is);
       } else {
@@ -80,5 +92,6 @@ public class RabbitMQConfig {
     return props;
   }
 
-  private RabbitMQConfig() {}
+  private RabbitMQConfig() {
+  }
 }
