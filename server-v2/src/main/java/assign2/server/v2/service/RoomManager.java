@@ -10,22 +10,23 @@ import javax.websocket.Session;
  */
 public class RoomManager {
 
-  private static final ConcurrentHashMap<String, Set<Session>> rooms = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Set<Session>> rooms = new ConcurrentHashMap<>();
 
-  public static void addSession(String roomId, Session session) {
-    rooms.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(session);
-  }
+    public static void addSession(String roomId, Session session) {
+        rooms.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(session);
+    }
 
-  public static void removeSession(String roomId, Session session) {
-    rooms.computeIfPresent(roomId, (k, sessions) -> {
-      sessions.remove(session);
-      return sessions.isEmpty() ? null : sessions;  // null removes the map entry
-    });
-  }
+    public static void removeSession(String roomId, Session session) {
+        rooms.computeIfPresent(roomId, (k, sessions) -> {
+            sessions.remove(session);
+            return sessions.isEmpty() ? null : sessions;  // null removes the map entry
+        });
+    }
 
-  public static Set<Session> getSessions(String roomId) {
-    return rooms.get(roomId);
-  }
+    public static Set<Session> getSessions(String roomId) {
+        return rooms.get(roomId);
+    }
 
-  private RoomManager() {}
+    private RoomManager() {
+    }
 }

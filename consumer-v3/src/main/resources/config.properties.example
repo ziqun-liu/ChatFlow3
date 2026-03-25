@@ -1,0 +1,32 @@
+# consumer-v3 configuration (copy to config.properties for local dev)
+# DO NOT commit config.properties with real credentials
+
+# RabbitMQ
+rabbitmq.host=localhost
+rabbitmq.port=5672
+rabbitmq.user=guest
+rabbitmq.pass=guest
+rabbitmq.exchange=chat.exchange
+rabbitmq.prefetch=50
+
+# Redis
+redis.host=localhost
+redis.port=6379
+redis.pool.maxTotal=20
+redis.pool.maxWaitMs=2000
+
+# Consumer threads
+consumer.threads=10
+
+# MySQL (DB_PASS is required — no default)
+db.host=localhost
+db.port=3306
+db.name=chatflow
+db.user=chatflow
+# db.pass=
+
+# Batch write tuning
+db.batch.size=500
+db.flush.intervalMs=500
+db.pool.size=10
+db.writer.threads=3

@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: redis-local
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mysql:
+    image: mysql:8
+    container_name: mysql-local
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: chatflow
+      MYSQL_USER: chatflow
+      MYSQL_PASSWORD: chatflow
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  server:
+    image: tomcat:9-jdk11
+    container_name: server
+    ports:
+      - "8080:8080"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: chatflow
+      DB_USER: chatflow
+      DB_PASS: chatflow
+      DB_POOL_SIZE: 5
+    volumes:
+      - ./server-v2/target/server-v2-1.0-SNAPSHOT.war:/usr/local/tomcat/webapps/server.war
+      - ./docker/lib/mysql-connector-j-8.3.0.jar:/usr/local/tomcat/lib/mysql-connector-j-8.3.0.jar
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  consumer:
+    image: eclipse-temurin:11-jre
+    container_name: consumer
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis
+      DB_HOST: mysql
+      DB_PASS: chatflow
+      DB_BATCH_SIZE: ${DB_BATCH_SIZE:-500}
+      DB_FLUSH_INTERVAL_MS: ${DB_FLUSH_INTERVAL_MS:-500}
+      DB_WRITER_THREADS: ${DB_WRITER_THREADS:-3}
+      CONSUMER_THREADS: ${CONSUMER_THREADS:-10}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-50}
+    volumes:
+      - ./consumer-v3/target/consumer-v3-1.0-SNAPSHOT.jar:/app/consumer.jar
+    command: java -jar /app/consumer.jar
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy

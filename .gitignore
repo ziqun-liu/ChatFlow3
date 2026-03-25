@@ -7,9 +7,11 @@ dependency-reduced-pom.xml
 *.class
 *.log
 config.properties
-assignment2.md
 .cursor/
 .aiassistant
 .claude/
 client/results/**
 .git/**
+*.png
+docker/
+chat-history.txt

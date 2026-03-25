@@ -1,6 +1,6 @@
 #!/bin/bash
 # consumer-setup.sh
-# Builds consumer JAR and deploys to the consumer EC2 instance.
+# Builds consumer-v3 JAR and deploys to the consumer EC2 instance.
 #
 # Usage:
 #   chmod +x consumer-setup.sh
@@ -11,23 +11,26 @@
 #   - ec2-user has write access to /opt/consumer
 
 set -e
-# Variables: SSH_KEY, CONSUMER_HOST, SERVER_URLS, RABBITMQ_HOST
-# ── Configuration (assign variables before use) ────────────────────────
-SSH_KEY="~/.ssh/cs6650-assignment2.pem"          # Replace with your SSH private key path, e.g. ~/.ssh/cs6650.pem
+
+# ── Configuration ────────────────────────────────────────────────────────────
+SSH_KEY="~/.ssh/cs6650-assignment2.pem"
 EC2_USER="ec2-user"
 CONSUMER_HOST="54.212.1.204"   # Replace with public IP of consumer EC2 instance
 
-# RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, REDIS_HOST, REDIS_PORT, CONSUMER_THREADS
-# are inherited from deploy-all.sh (or must be exported before calling this script directly)
+# Inherited from deploy-all.sh (or export before calling directly):
+# RABBITMQ_HOST, RABBITMQ_USER, RABBITMQ_PASS, REDIS_HOST, REDIS_PORT,
+# CONSUMER_THREADS, RABBITMQ_PREFETCH, REDIS_POOL_MAX_TOTAL, REDIS_POOL_MAX_WAIT_MS
+# DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS,
+# DB_BATCH_SIZE, DB_FLUSH_INTERVAL_MS, DB_POOL_SIZE, DB_WRITER_THREADS
 
-CONSUMER_DIR="$(cd "$(dirname "$0")/../consumer" && pwd)"
-JAR_NAME="consumer-1.0-SNAPSHOT.jar"
+CONSUMER_DIR="$(cd "$(dirname "$0")/../consumer-v3" && pwd)"
+JAR_NAME="consumer-v3-1.0-SNAPSHOT.jar"
 LOCAL_JAR="$CONSUMER_DIR/target/$JAR_NAME"
 REMOTE_DIR="/opt/consumer"
-# ───────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 echo "======================================"
-echo " Step 1: Build consumer JAR"
+echo " Step 1: Build consumer-v3 JAR"
 echo "======================================"
 cd "$CONSUMER_DIR"
 mvn clean package -q
@@ -48,19 +51,17 @@ scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
 
 echo ""
 echo "======================================"
-echo " Step 3: Start consumer on EC2"
+echo " Step 3: Start consumer-v3 on EC2"
 echo "======================================"
 
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$CONSUMER_HOST" bash <<EOF
   set -e
 
-  # Kill any existing consumer process
   echo "  Stopping existing consumer (if any)..."
-  pkill -f "$JAR_NAME" 2>/dev/null || true
+  pkill -f "consumer.*SNAPSHOT.jar" 2>/dev/null || true
   sleep 2
 
-  # Start consumer in background, redirect logs to file
-  echo "  Starting consumer..."
+  echo "  Starting consumer-v3..."
   nohup env \
     RABBITMQ_HOST="$RABBITMQ_HOST" \
     RABBITMQ_PORT="5672" \
@@ -72,19 +73,27 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$CONSUMER_HOST" bash <<
     RABBITMQ_PREFETCH="$RABBITMQ_PREFETCH" \
     REDIS_POOL_MAX_TOTAL="$REDIS_POOL_MAX_TOTAL" \
     REDIS_POOL_MAX_WAIT_MS="$REDIS_POOL_MAX_WAIT_MS" \
+    DB_HOST="$DB_HOST" \
+    DB_PORT="${DB_PORT:-3306}" \
+    DB_NAME="${DB_NAME:-chatflow}" \
+    DB_USER="$DB_USER" \
+    DB_PASS="$DB_PASS" \
+    DB_BATCH_SIZE="${DB_BATCH_SIZE:-500}" \
+    DB_FLUSH_INTERVAL_MS="${DB_FLUSH_INTERVAL_MS:-500}" \
+    DB_POOL_SIZE="${DB_POOL_SIZE:-10}" \
+    DB_WRITER_THREADS="${DB_WRITER_THREADS:-3}" \
     java -jar "$REMOTE_DIR/$JAR_NAME" \
     > "$REMOTE_DIR/consumer.log" 2>&1 &
 
   echo "  Consumer PID: \$!"
   echo \$! > "$REMOTE_DIR/consumer.pid"
 
-  # Wait and verify process is still running
   sleep 3
   if kill -0 \$(cat "$REMOTE_DIR/consumer.pid") 2>/dev/null; then
-    echo "  Consumer started successfully."
+    echo "  Consumer-v3 started successfully."
     echo "  Logs: $REMOTE_DIR/consumer.log"
   else
-    echo "  Consumer failed to start. Last log lines:"
+    echo "  Consumer-v3 failed to start. Last log lines:"
     tail -20 "$REMOTE_DIR/consumer.log"
     exit 1
   fi

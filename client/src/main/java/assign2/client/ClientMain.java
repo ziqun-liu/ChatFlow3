@@ -5,6 +5,14 @@ import assign2.client.metrics.Metrics;
 import assign2.client.model.ChatMessage;
 import assign2.client.producer.MessageGenerator;
 import assign2.client.sender.SenderWorker;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -25,7 +33,8 @@ public class ClientMain {
     if (envVal != null && !envVal.isEmpty()) return envVal;
     return "ws://localhost:8080/server/chat/";
   }
-  private static final int TOTAL_MESSAGES = 500_000;
+  private static final int TOTAL_MESSAGES = Integer.parseInt(
+      System.getenv().getOrDefault("TOTAL_MESSAGES", "500000"));
 
   private static final int WARMUP_THREADS = 32;
   private static final int MESSAGE_PER_THREAD = 1000;
@@ -33,8 +42,43 @@ public class ClientMain {
   private static final int QUEUE_CAPACITY = 10_000;
 
   public static void main(String[] args) throws Exception {
+    Instant testStart = Instant.now();
     runWarmup();
     runMainPhase();
+    fetchMetrics(testStart, Instant.now());
+  }
+
+  // ============================== Metrics API ==============================
+
+  private static void fetchMetrics(Instant testStart, Instant testEnd) {
+    // Derive HTTP host from WS_URI: ws://host:port/path -> http://host:port/path
+    String httpBase = WS_URI.replaceFirst("^ws://", "http://")
+                            .replaceFirst("^wss://", "https://")
+                            .replaceFirst("/chat/$", "");
+    String start = testStart.toString().replace("T", " ").replace("Z", "");
+    String end   = testEnd.toString().replace("T", " ").replace("Z", "");
+    String url   = httpBase + "/metrics?start=" + encode(start) + "&end=" + encode(end);
+
+    System.out.println("\n=== Fetching Metrics API: " + url + " ===");
+    try {
+      HttpClient client = HttpClient.newHttpClient();
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create(url))
+          .GET()
+          .build();
+      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      String body = response.body();
+      System.out.println("Metrics API response (HTTP " + response.statusCode() + "):");
+      System.out.println(body);
+      Files.writeString(Paths.get("metrics-result.json"), body);
+      System.out.println("Metrics written to metrics-result.json");
+    } catch (IOException | InterruptedException e) {
+      System.err.println("Failed to fetch metrics: " + e.getMessage());
+    }
+  }
+
+  private static String encode(String s) {
+    return s.replace(" ", "%20").replace(":", "%3A");
   }
 
   // ============================== Warmup ==============================
