@@ -12,6 +12,9 @@ config.properties
 .claude/
 client/results/**
 .git/**
-*.png
 docker/
 chat-history.txt
+assignment3-plan.md
+assignment3-plan_v2.md
+interview-notes.md
+
